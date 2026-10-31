@@ -28,7 +28,7 @@ export default function LogoUploader({ inputRef, freeCount, maxCount, isFull, on
         <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
           {isFull
             ? `Досягнуто ліміту (${maxCount}/${maxCount}). Видаліть логотип, щоб звільнити місце.`
-            : `Система автоматично прив'яже файли до найближчих контрольних точок і масштабує за стандартами`}
+            : `Або клацніть по конкретній точці на лекалі, щоб додати файл саме туди`}
         </div>
       </div>
     </>

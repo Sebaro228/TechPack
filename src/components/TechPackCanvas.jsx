@@ -37,7 +37,8 @@ export default function TechPackCanvas({
   onLogoMouseDown,
   onMouseMove,
   onMouseUp,
-  onFreePointClick,
+  onControlPointMouseDown,
+  draggingControlPoint,
 }) {
   const { sheetW, sheetH, pW, pH, pX, pY, centerX, pxPerCm } = geometry;
   const neckPoint = getNeckPoint(selectedPiece);
@@ -124,7 +125,11 @@ export default function TechPackCanvas({
         return (
           <g key={cp.code}>
             {!isOccupied && (
-              <g style={{ cursor: 'pointer', opacity: 0.45 }} onClick={onFreePointClick}>
+              <g
+                className={`control-point-handle ${draggingControlPoint === cp.code ? 'dragging' : ''}`}
+                style={{ cursor: cp.axisLockedToCenter ? 'ns-resize' : 'grab', opacity: 0.75 }}
+                onMouseDown={(event) => onControlPointMouseDown(event, cp)}
+              >
                 <line x1={cx - 6} y1={cy} x2={cx + 6} y2={cy} stroke="#3b82f6" strokeWidth="1.5" />
                 <line x1={cx} y1={cy - 6} x2={cx} y2={cy + 6} stroke="#3b82f6" strokeWidth="1.5" />
                 <text x={cx + 10} y={cy + 4} fontSize="8" fontWeight="600" fill="#3b82f6">
@@ -132,7 +137,19 @@ export default function TechPackCanvas({
                 </text>
               </g>
             )}
-            {isOccupied && <circle cx={cx} cy={cy} r="3" fill="#16a34a" stroke="#ffffff" strokeWidth="1" />}
+            {isOccupied && (
+              <circle
+                className="control-point-handle"
+                cx={cx}
+                cy={cy}
+                r="4"
+                fill="#16a34a"
+                stroke="#ffffff"
+                strokeWidth="1.5"
+                style={{ cursor: cp.axisLockedToCenter ? 'ns-resize' : 'grab' }}
+                onMouseDown={(event) => onControlPointMouseDown(event, cp)}
+              />
+            )}
           </g>
         );
       })}

@@ -310,6 +310,30 @@ input[type="text"]:disabled {
   padding-right: 4px;
 }
 
+.logo-buffer {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.logo-buffer .logo-list {
+  max-height: 180px;
+  margin-bottom: 0;
+}
+
+.logo-buffer-hint,
+.logo-buffer-empty {
+  margin: -4px 0 10px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.logo-buffer-empty {
+  margin: 0;
+  padding: 8px 2px;
+}
+
 .logo-list-item {
   display: flex;
   align-items: center;
@@ -504,6 +528,20 @@ input[type="text"]:disabled {
 .btn-secondary:hover {
   background: #f1f5f9;
   border-color: #94a3b8;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.control-point-handle:hover line,
+.control-point-handle:hover circle {
+  stroke-width: 2.5;
+}
+
+.control-point-handle.dragging {
+  opacity: 1 !important;
 }
 
 .btn-primary {
