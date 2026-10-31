@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import './App.css';
 import { FOOTBALL_CONTROL_POINTS, FOOTBALL_KIT_PRESETS, GRADING_RULES } from './presets';
 import { EMPTY_KIT_ID, DEFAULT_KIT_NAME } from './constants';
 import { getSheetGeometry, round1 } from './utils/geometry';
 import { calculateDistances, generateGradingTable } from './utils/calculations';
 import { readLogoFile, makeId } from './utils/logoFiles';
-import { downloadSvgAsPdf } from './utils/pdf';
+import { downloadPiecesAsPdf } from './utils/pdf';
 import { useLogoDrag } from './hooks/useLogoDrag';
 
 import Header from './components/Header';
@@ -242,12 +243,42 @@ export default function App() {
 
   // ---------- Експорт ----------
 
-  const handleDownloadPdf = () =>
-    downloadSvgAsPdf(svgContainerRef.current?.querySelector('svg'), {
-      width: geometry.sheetW,
-      height: geometry.sheetH,
-      filename: `FootballKit_TechPack_${selectedPiece}_${selectedSize}.pdf`,
+  // Усі види (перед, спинка, рукав) в одному PDF — по сторінці на вигляд,
+  // у чистому режимі без осей, припусків, контрольних точок і розмірних стрілок
+  const handleDownloadPdf = () => {
+    const pieces = ['front', 'back', 'sleeve'].map((piece) => {
+      const w = round1(pieceDimensions[piece].width * sizeScale);
+      const h = round1(pieceDimensions[piece].height * sizeScale);
+      const pieceGeometry = getSheetGeometry(w, h);
+
+      const svgString = renderToStaticMarkup(
+        <TechPackCanvas
+          exportMode
+          geometry={pieceGeometry}
+          selectedPiece={piece}
+          selectedSize={selectedSize}
+          sizeScale={sizeScale}
+          effectiveW={w}
+          effectiveH={h}
+          controlPoints={FOOTBALL_CONTROL_POINTS[piece] || []}
+          pieceLogos={logos.filter((l) => l.pieceType === piece)}
+          selectedLogoId={null}
+          jerseyColor={jerseyColor}
+          showDimensions={false}
+          showSeamAllowances={false}
+          showCalibrationSquare={showCalibrationSquare}
+          onLogoMouseDown={() => {}}
+          onMouseMove={undefined}
+          onMouseUp={undefined}
+          onFreePointClick={undefined}
+        />
+      );
+
+      return { svgString, width: pieceGeometry.sheetW, height: pieceGeometry.sheetH };
     });
+
+    downloadPiecesAsPdf(pieces, `FootballKit_TechPack_${selectedSize}.pdf`);
+  };
 
   return (
     <div className="app-container">
