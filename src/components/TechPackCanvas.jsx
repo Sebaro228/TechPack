@@ -30,18 +30,26 @@ export default function TechPackCanvas({
   pieceLogos,
   selectedLogoId,
   jerseyColor,
+  designFill,
   showDimensions,
   showSeamAllowances,
   showCalibrationSquare,
   onLogoMouseDown,
   onMouseMove,
   onMouseUp,
+  onControlPointMouseDown,
+  draggingControlPoint,
   onFreePointClick,
   exportMode = false, // чистий вигляд для PDF: без службових ліній на виробі
 }) {
   const { sheetW, sheetH, pW, pH, pX, pY, centerX, pxPerCm } = geometry;
   const neckPoint = getNeckPoint(selectedPiece);
   const neckPxY = pY + neckPoint.y * sizeScale * pxPerCm;
+  const contourPath = renderContourPath(selectedPiece, pW, pH, pX, pY, sizeScale);
+  const clipPathId = `piece-clip-${selectedPiece}`;
+  const fillScale = (designFill?.scale || 100) / 100;
+  const fillX = pX + ((designFill?.offsetX || 0) / 100) * pW;
+  const fillY = pY + ((designFill?.offsetY || 0) / 100) * pH;
 
   const seamVisible = showSeamAllowances && !exportMode;
   const dimensionsVisible = showDimensions && !exportMode;
@@ -59,6 +67,9 @@ export default function TechPackCanvas({
         <ArrowMarker id="arr-start-red" color="#dc2626" start />
         <ArrowMarker id="arr-end-blue" color="#2563eb" />
         <ArrowMarker id="arr-start-blue" color="#2563eb" start />
+        <clipPath id={clipPathId}>
+          <path d={contourPath} />
+        </clipPath>
       </defs>
 
       {/* Штамп креслення */}
@@ -79,8 +90,22 @@ export default function TechPackCanvas({
         {selectedSize}
       </text>
 
+      {/* Дизайн обрізається точно по векторному контуру деталі. */}
+      {designFill?.dataUrl && (
+        <g clipPath={`url(#${clipPathId})`} pointerEvents="none">
+          <image
+            href={designFill.dataUrl}
+            x={fillX}
+            y={fillY}
+            width={pW * fillScale}
+            height={pH * fillScale}
+            preserveAspectRatio="xMidYMid slice"
+          />
+        </g>
+      )}
+
       {/* Контур деталі крою */}
-      <path d={renderContourPath(selectedPiece, pW, pH, pX, pY, sizeScale)} fill="#ffffff" stroke="#334155" strokeWidth="2.5" />
+      <path d={contourPath} fill={designFill?.dataUrl ? "none" : "#ffffff"} stroke="#334155" strokeWidth="2.5" />
 
       {/* Припуски на шви 3-5 мм (пунктир) */}
       {seamVisible && (
@@ -107,7 +132,11 @@ export default function TechPackCanvas({
         return (
           <g key={cp.code}>
             {!isOccupied && (
-              <g style={{ cursor: 'pointer', opacity: 0.45 }} onClick={onFreePointClick}>
+              <g
+                className={`control-point-handle ${draggingControlPoint === cp.code ? 'dragging' : ''}`}
+                style={{ cursor: cp.axisLockedToCenter ? 'ns-resize' : 'grab', opacity: 0.75 }}
+                onMouseDown={(event) => onControlPointMouseDown(event, cp)}
+              >
                 <line x1={cx - 6} y1={cy} x2={cx + 6} y2={cy} stroke="#3b82f6" strokeWidth="1.5" />
                 <line x1={cx} y1={cy - 6} x2={cx} y2={cy + 6} stroke="#3b82f6" strokeWidth="1.5" />
                 <text x={cx + 10} y={cy + 4} fontSize="8" fontWeight="600" fill="#3b82f6">
@@ -115,7 +144,19 @@ export default function TechPackCanvas({
                 </text>
               </g>
             )}
-            {isOccupied && <circle cx={cx} cy={cy} r="3" fill="#16a34a" stroke="#ffffff" strokeWidth="1" />}
+            {isOccupied && (
+              <circle
+                className="control-point-handle"
+                cx={cx}
+                cy={cy}
+                r="4"
+                fill="#16a34a"
+                stroke="#ffffff"
+                strokeWidth="1.5"
+                style={{ cursor: cp.axisLockedToCenter ? 'ns-resize' : 'grab' }}
+                onMouseDown={(event) => onControlPointMouseDown(event, cp)}
+              />
+            )}
           </g>
         );
       })}

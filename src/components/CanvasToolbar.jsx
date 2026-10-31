@@ -8,8 +8,10 @@ export default function CanvasToolbar({
   sizeScale,
   showDimensions,
   showSeamAllowances,
+  hasCustomControlPoints,
   onToggleDimensions,
   onToggleSeamAllowances,
+  onResetControlPoints,
 }) {
   return (
     <div className="canvas-toolbar">
@@ -27,6 +29,14 @@ export default function CanvasToolbar({
         </button>
         <button className="btn-secondary" onClick={onToggleSeamAllowances}>
           {showSeamAllowances ? 'Приховати припуски' : 'Показати припуски (3 мм)'}
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={onResetControlPoints}
+          disabled={!hasCustomControlPoints}
+          title="Повернути технологічні точки розміщення до значень пресету"
+        >
+          Скинути точки
         </button>
       </div>
     </div>

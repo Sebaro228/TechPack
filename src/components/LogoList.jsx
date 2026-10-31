@@ -1,5 +1,5 @@
 // Список логотипів поточної сторони
-export default function LogoList({ logos, controlPoints, maxCount, selectedLogoId, onSelect, onDelete }) {
+export default function LogoList({ logos, controlPoints, maxCount, selectedLogoId, onSelect, onRemoveFromPoint }) {
   return (
     <div style={{ marginTop: '14px' }}>
       <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: '#334155' }}>
@@ -43,13 +43,13 @@ export default function LogoList({ logos, controlPoints, maxCount, selectedLogoI
               <div className="logo-item-actions">
                 <button
                   className="btn-icon-sm danger"
-                  title="Видалити"
+                  title="Зняти з точки до буфера"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete(logo.id);
+                    onRemoveFromPoint(logo.id);
                   }}
                 >
-                  🗑
+                  ↘
                 </button>
               </div>
             </div>

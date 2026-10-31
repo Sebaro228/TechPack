@@ -8,16 +8,19 @@ import { calculateDistances, generateGradingTable } from './utils/calculations';
 import { readLogoFile, makeId } from './utils/logoFiles';
 import { downloadPiecesAsPdf } from './utils/pdf';
 import { useLogoDrag } from './hooks/useLogoDrag';
+import { useControlPointDrag } from './hooks/useControlPointDrag';
 
 import Header from './components/Header';
 import PieceSelector from './components/PieceSelector';
 import KitPresets from './components/KitPresets';
 import LogoUploader from './components/LogoUploader';
 import LogoList from './components/LogoList';
+import LogoBuffer from './components/LogoBuffer';
 import LogoInspector from './components/LogoInspector';
 import CanvasToolbar from './components/CanvasToolbar';
 import TechPackCanvas from './components/TechPackCanvas';
 import GradingTable from './components/GradingTable';
+import DesignFillControls from './components/DesignFillControls';
 
 export default function App() {
   // Стан виробу
@@ -41,6 +44,12 @@ export default function App() {
   // Список усіх розміщених логотипів
   const [logos, setLogos] = useState([]);
   const [selectedLogoId, setSelectedLogoId] = useState(null);
+  const [logoBuffer, setLogoBuffer] = useState([]);
+  const [selectedBufferLogoId, setSelectedBufferLogoId] = useState(null);
+  // Заливка зберігається окремо для переду, спинки та рукава.
+  const [designFills, setDesignFills] = useState({});
+  const [controlPointOverrides, setControlPointOverrides] = useState({});
+  const [pendingControlPointCode, setPendingControlPointCode] = useState(null);
 
   // Прапорці відображення
   const [showDimensions, setShowDimensions] = useState(true);
@@ -63,7 +72,17 @@ export default function App() {
   const geometry = getSheetGeometry(effectiveW, effectiveH);
 
   // Контрольні точки поточної сторони
-  const pieceControlPoints = FOOTBALL_CONTROL_POINTS[selectedPiece] || [];
+  const pieceControlPoints = (FOOTBALL_CONTROL_POINTS[selectedPiece] || []).map((point) => {
+    const override = controlPointOverrides[selectedPiece]?.[point.code] || {};
+    const axisLockedToCenter = point.centerHorizontally;
+    return {
+      ...point,
+      ...override,
+      axisLockedToCenter,
+      // Центральні технологічні слоти не можуть втратити прив'язку до осі.
+      centerHorizontally: axisLockedToCenter || override.centerHorizontally || false,
+    };
+  });
   const maxControlPoints = pieceControlPoints.length;
   const currentPieceLogos = logos.filter((l) => l.pieceType === selectedPiece);
   const isFull = currentPieceLogos.length >= maxControlPoints;
@@ -93,6 +112,89 @@ export default function App() {
     selectedPiece,
     pieceControlPoints,
   });
+
+  const controlPointDrag = useControlPointDrag({
+    svgContainerRef,
+    geometry,
+    selectedPiece,
+    sizeScale,
+    pieceDimensions,
+    setControlPointOverrides,
+    setLogos,
+    onControlPointClick: (code) => {
+      const existingLogo = logos.find(
+        (logo) => logo.pieceType === selectedPiece && logo.controlPointCode === code
+      );
+      if (existingLogo) {
+        setSelectedLogoId(existingLogo.id);
+        return;
+      }
+      const bufferedLogo = logoBuffer.find((logo) => logo.id === selectedBufferLogoId);
+      if (bufferedLogo) {
+        const point = pieceControlPoints.find((item) => item.code === code);
+        if (!point) return;
+        const placedLogo = {
+          ...bufferedLogo,
+          pieceType: selectedPiece,
+          controlPointCode: point.code,
+          anchorPointCode: point.code,
+          positionX: point.defaultX,
+          positionY: point.defaultY,
+          width: point.standardW,
+          height: point.standardH,
+          centerHorizontally: point.centerHorizontally,
+          type: point.defaultType,
+          isLocked: true,
+          isVisible: true,
+        };
+        setLogos((previous) => [...previous, placedLogo]);
+        setLogoBuffer((previous) => previous.filter((logo) => logo.id !== bufferedLogo.id));
+        setSelectedBufferLogoId(null);
+        setSelectedLogoId(placedLogo.id);
+        return;
+      }
+      setPendingControlPointCode(code);
+      batchFileInputRef.current?.click();
+    },
+  });
+
+  const handleCanvasMouseMove = (event) => {
+    drag.handleMouseMove(event);
+    controlPointDrag.handleMouseMove(event);
+  };
+
+  const handleCanvasMouseUp = () => {
+    drag.handleMouseUp();
+    controlPointDrag.handleMouseUp();
+  };
+
+  const resetControlPoints = () => {
+    setControlPointOverrides((previous) => {
+      const next = { ...previous };
+      delete next[selectedPiece];
+      return next;
+    });
+    setLogos((previous) =>
+      previous.map((logo) => {
+        if (logo.pieceType !== selectedPiece) return logo;
+        const basePoint = (FOOTBALL_CONTROL_POINTS[selectedPiece] || []).find(
+          (point) => point.code === logo.controlPointCode
+        );
+        return basePoint
+          ? {
+              ...logo,
+              positionX: basePoint.defaultX,
+              positionY: basePoint.defaultY,
+              centerHorizontally: basePoint.centerHorizontally,
+            }
+          : logo;
+      })
+    );
+  };
+
+  const hasCustomControlPoints = Boolean(
+    Object.keys(controlPointOverrides[selectedPiece] || {}).length
+  );
 
   // ---------- Комплекти ----------
 
@@ -178,6 +280,40 @@ export default function App() {
     e.target.value = '';
     if (files.length === 0) return;
 
+    const requestedControlPoint = pendingControlPointCode
+      ? pieceControlPoints.find((point) => point.code === pendingControlPointCode)
+      : null;
+    setPendingControlPointCode(null);
+
+    if (requestedControlPoint) {
+      const isOccupied = logos.some(
+        (logo) => logo.pieceType === selectedPiece && logo.controlPointCode === requestedControlPoint.code
+      );
+      if (isOccupied) return;
+
+      readLogoFile(files[0]).then((loaded) => {
+        setLogos((previous) => [
+          ...previous,
+          {
+            id: makeId('logo'),
+            ...loaded,
+            width: requestedControlPoint.standardW,
+            height: requestedControlPoint.standardH,
+            positionX: requestedControlPoint.defaultX,
+            positionY: requestedControlPoint.defaultY,
+            centerHorizontally: requestedControlPoint.centerHorizontally,
+            controlPointCode: requestedControlPoint.code,
+            anchorPointCode: requestedControlPoint.code,
+            pieceType: selectedPiece,
+            type: requestedControlPoint.defaultType,
+            isLocked: true,
+            isVisible: true,
+          },
+        ]);
+      });
+      return;
+    }
+
     const availableSlots = maxControlPoints - currentPieceLogos.length;
     if (availableSlots <= 0) {
       alert(`Всі ${maxControlPoints} контрольних точок на цій деталі форми вже зайняті. Видаліть зайві логотипи, щоб додати нові.`);
@@ -232,13 +368,57 @@ export default function App() {
     setLogos((prev) => prev.map((l) => (l.id === targetId ? { ...l, ...loaded } : l)));
   };
 
-  // Видалення логотипа (звільняє контрольну точку)
-  const handleDeleteLogo = (id) => {
-    const nextLogos = logos.filter((l) => l.id !== id);
+  // Знятий із точки логотип не зникає: він переходить у буфер для повторного використання.
+  const handleRemoveLogoFromPoint = (id) => {
+    const logoToBuffer = logos.find((logo) => logo.id === id);
+    if (!logoToBuffer) return;
+    const nextLogos = logos.filter((logo) => logo.id !== id);
     setLogos(nextLogos);
+    setLogoBuffer((previous) => [...previous, logoToBuffer]);
     if (selectedLogoId === id) {
       setSelectedLogoId(nextLogos.find((l) => l.pieceType === selectedPiece)?.id || null);
     }
+  };
+
+  const handleDeleteBufferedLogo = (id) => {
+    setLogoBuffer((previous) => previous.filter((logo) => logo.id !== id));
+    if (selectedBufferLogoId === id) setSelectedBufferLogoId(null);
+  };
+
+  // ---------- Дизайн заливки ----------
+
+  const activeDesignFill = designFills[selectedPiece] || null;
+
+  const handleDesignUpload = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setDesignFills((previous) => ({
+        ...previous,
+        [selectedPiece]: {
+          dataUrl: reader.result,
+          name: file.name,
+          scale: 100,
+          offsetX: 0,
+          offsetY: 0,
+        },
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const updateActiveDesignFill = (changes) => {
+    setDesignFills((previous) => ({
+      ...previous,
+      [selectedPiece]: { ...previous[selectedPiece], ...changes },
+    }));
+  };
+
+  const clearActiveDesignFill = () => {
+    setDesignFills((previous) => {
+      const next = { ...previous };
+      delete next[selectedPiece];
+      return next;
+    });
   };
 
   // ---------- Експорт ----------
@@ -313,6 +493,13 @@ export default function App() {
             }}
           />
 
+          <DesignFillControls
+            designFill={activeDesignFill}
+            onUpload={handleDesignUpload}
+            onChange={updateActiveDesignFill}
+            onClear={clearActiveDesignFill}
+          />
+
           <div className="card">
             <LogoUploader
               inputRef={batchFileInputRef}
@@ -327,7 +514,13 @@ export default function App() {
               maxCount={maxControlPoints}
               selectedLogoId={selectedLogoId}
               onSelect={setSelectedLogoId}
-              onDelete={handleDeleteLogo}
+              onRemoveFromPoint={handleRemoveLogoFromPoint}
+            />
+            <LogoBuffer
+              logos={logoBuffer}
+              selectedLogoId={selectedBufferLogoId}
+              onSelect={setSelectedBufferLogoId}
+              onDelete={handleDeleteBufferedLogo}
             />
           </div>
 
@@ -355,6 +548,8 @@ export default function App() {
               showSeamAllowances={showSeamAllowances}
               onToggleDimensions={() => setShowDimensions((v) => !v)}
               onToggleSeamAllowances={() => setShowSeamAllowances((v) => !v)}
+              hasCustomControlPoints={hasCustomControlPoints}
+              onResetControlPoints={resetControlPoints}
             />
 
             <div className="canvas-wrapper" ref={svgContainerRef}>
@@ -369,13 +564,15 @@ export default function App() {
                 pieceLogos={currentPieceLogos}
                 selectedLogoId={selectedLogoId}
                 jerseyColor={jerseyColor}
+                designFill={activeDesignFill}
                 showDimensions={showDimensions}
                 showSeamAllowances={showSeamAllowances}
                 showCalibrationSquare={showCalibrationSquare}
                 onLogoMouseDown={drag.handleMouseDown}
-                onMouseMove={drag.handleMouseMove}
-                onMouseUp={drag.handleMouseUp}
-                onFreePointClick={() => batchFileInputRef.current?.click()}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
+                onControlPointMouseDown={controlPointDrag.handleMouseDown}
+                draggingControlPoint={controlPointDrag.draggingControlPoint?.code}
               />
             </div>
           </div>
