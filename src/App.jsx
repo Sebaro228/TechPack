@@ -17,6 +17,7 @@ import LogoInspector from './components/LogoInspector';
 import CanvasToolbar from './components/CanvasToolbar';
 import TechPackCanvas from './components/TechPackCanvas';
 import GradingTable from './components/GradingTable';
+import DesignFillControls from './components/DesignFillControls';
 
 export default function App() {
   // Стан виробу
@@ -40,6 +41,8 @@ export default function App() {
   // Список усіх розміщених логотипів
   const [logos, setLogos] = useState([]);
   const [selectedLogoId, setSelectedLogoId] = useState(null);
+  // Заливка зберігається окремо для переду, спинки та рукава.
+  const [designFills, setDesignFills] = useState({});
 
   // Прапорці відображення
   const [showDimensions, setShowDimensions] = useState(true);
@@ -240,6 +243,42 @@ export default function App() {
     }
   };
 
+  // ---------- Дизайн заливки ----------
+
+  const activeDesignFill = designFills[selectedPiece] || null;
+
+  const handleDesignUpload = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setDesignFills((previous) => ({
+        ...previous,
+        [selectedPiece]: {
+          dataUrl: reader.result,
+          name: file.name,
+          scale: 100,
+          offsetX: 0,
+          offsetY: 0,
+        },
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const updateActiveDesignFill = (changes) => {
+    setDesignFills((previous) => ({
+      ...previous,
+      [selectedPiece]: { ...previous[selectedPiece], ...changes },
+    }));
+  };
+
+  const clearActiveDesignFill = () => {
+    setDesignFills((previous) => {
+      const next = { ...previous };
+      delete next[selectedPiece];
+      return next;
+    });
+  };
+
   // ---------- Експорт ----------
 
   const handleDownloadPdf = () =>
@@ -280,6 +319,13 @@ export default function App() {
               onNumberChange: handlePlayerNumberChange,
               onColorChange: handleJerseyColorChange,
             }}
+          />
+
+          <DesignFillControls
+            designFill={activeDesignFill}
+            onUpload={handleDesignUpload}
+            onChange={updateActiveDesignFill}
+            onClear={clearActiveDesignFill}
           />
 
           <div className="card">
@@ -338,6 +384,7 @@ export default function App() {
                 pieceLogos={currentPieceLogos}
                 selectedLogoId={selectedLogoId}
                 jerseyColor={jerseyColor}
+                designFill={activeDesignFill}
                 showDimensions={showDimensions}
                 showSeamAllowances={showSeamAllowances}
                 showCalibrationSquare={showCalibrationSquare}

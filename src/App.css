@@ -506,6 +506,69 @@ input[type="text"]:disabled {
   border-color: #94a3b8;
 }
 
+.btn-primary {
+  padding: 8px 12px;
+  background: #2563eb;
+  color: #ffffff;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.design-fill-card {
+  border-color: #bfdbfe;
+}
+
+.design-fill-hint {
+  margin: -3px 0 12px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.design-fill-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.design-fill-settings {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.design-fill-settings label {
+  margin: 0;
+}
+
+.design-fill-settings input[type="range"] {
+  width: 100%;
+  margin-top: 5px;
+  accent-color: #2563eb;
+}
+
 .btn-sm {
   padding: 5px 10px;
   font-size: 11px;

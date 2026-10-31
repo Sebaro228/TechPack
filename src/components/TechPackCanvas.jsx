@@ -30,6 +30,7 @@ export default function TechPackCanvas({
   pieceLogos,
   selectedLogoId,
   jerseyColor,
+  designFill,
   showDimensions,
   showSeamAllowances,
   showCalibrationSquare,
@@ -41,6 +42,11 @@ export default function TechPackCanvas({
   const { sheetW, sheetH, pW, pH, pX, pY, centerX, pxPerCm } = geometry;
   const neckPoint = getNeckPoint(selectedPiece);
   const neckPxY = pY + neckPoint.y * sizeScale * pxPerCm;
+  const contourPath = renderContourPath(selectedPiece, pW, pH, pX, pY, sizeScale);
+  const clipPathId = `piece-clip-${selectedPiece}`;
+  const fillScale = (designFill?.scale || 100) / 100;
+  const fillX = pX + ((designFill?.offsetX || 0) / 100) * pW;
+  const fillY = pY + ((designFill?.offsetY || 0) / 100) * pH;
 
   return (
     <svg
@@ -55,6 +61,9 @@ export default function TechPackCanvas({
         <ArrowMarker id="arr-start-red" color="#dc2626" start />
         <ArrowMarker id="arr-end-blue" color="#2563eb" />
         <ArrowMarker id="arr-start-blue" color="#2563eb" start />
+        <clipPath id={clipPathId}>
+          <path d={contourPath} />
+        </clipPath>
       </defs>
 
       {/* Штамп креслення */}
@@ -75,8 +84,22 @@ export default function TechPackCanvas({
         {selectedSize}
       </text>
 
+      {/* Дизайн обрізається точно по векторному контуру деталі. */}
+      {designFill?.dataUrl && (
+        <g clipPath={`url(#${clipPathId})`} pointerEvents="none">
+          <image
+            href={designFill.dataUrl}
+            x={fillX}
+            y={fillY}
+            width={pW * fillScale}
+            height={pH * fillScale}
+            preserveAspectRatio="xMidYMid slice"
+          />
+        </g>
+      )}
+
       {/* Контур деталі крою */}
-      <path d={renderContourPath(selectedPiece, pW, pH, pX, pY, sizeScale)} fill="#ffffff" stroke="#334155" strokeWidth="2.5" />
+      <path d={contourPath} fill={designFill?.dataUrl ? "none" : "#ffffff"} stroke="#334155" strokeWidth="2.5" />
 
       {/* Припуски на шви 3-5 мм (пунктир) */}
       {showSeamAllowances && (
