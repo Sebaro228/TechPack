@@ -444,9 +444,10 @@ export default function App() {
           pieceLogos={logos.filter((l) => l.pieceType === piece)}
           selectedLogoId={null}
           jerseyColor={jerseyColor}
+          designFill={designFills[piece] || null}
           showDimensions={false}
           showSeamAllowances={false}
-          showCalibrationSquare={showCalibrationSquare}
+          showCalibrationSquare={false}
           onLogoMouseDown={() => {}}
           onMouseMove={undefined}
           onMouseUp={undefined}
