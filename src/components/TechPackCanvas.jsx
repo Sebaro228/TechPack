@@ -39,6 +39,8 @@ export default function TechPackCanvas({
   onMouseUp,
   onControlPointMouseDown,
   draggingControlPoint,
+  onFreePointClick,
+  exportMode = false, // чистий вигляд для PDF: без службових ліній на виробі
 }) {
   const { sheetW, sheetH, pW, pH, pX, pY, centerX, pxPerCm } = geometry;
   const neckPoint = getNeckPoint(selectedPiece);
@@ -48,6 +50,9 @@ export default function TechPackCanvas({
   const fillScale = (designFill?.scale || 100) / 100;
   const fillX = pX + ((designFill?.offsetX || 0) / 100) * pW;
   const fillY = pY + ((designFill?.offsetY || 0) / 100) * pH;
+
+  const seamVisible = showSeamAllowances && !exportMode;
+  const dimensionsVisible = showDimensions && !exportMode;
 
   return (
     <svg
@@ -73,7 +78,7 @@ export default function TechPackCanvas({
         ТЕХНОЛОГІЧНА КАРТА РОЗМІЩЕННЯ ПРИНТІВ (ТКШВ)
       </text>
       <text x="40" y="65" fontSize="12" fill="#475569">
-        Деталь: <b>{getPieceLabel(selectedPiece)}</b> | Лекало: <b>{effectiveW} × {effectiveH} см</b> | Масштаб: <b>×{sizeScale}</b>
+        Деталь: <tspan fontWeight="bold">{getPieceLabel(selectedPiece)}</tspan> | Лекало: <tspan fontWeight="bold">{effectiveW} × {effectiveH} см</tspan> | Масштаб: <tspan fontWeight="bold">×{sizeScale}</tspan>
       </text>
 
       {/* Бейдж розміру */}
@@ -103,7 +108,7 @@ export default function TechPackCanvas({
       <path d={contourPath} fill={designFill?.dataUrl ? "none" : "#ffffff"} stroke="#334155" strokeWidth="2.5" />
 
       {/* Припуски на шви 3-5 мм (пунктир) */}
-      {showSeamAllowances && (
+      {seamVisible && (
         <path
           d={renderContourPath(selectedPiece, pW - 10, pH - 10, pX + 5, pY + 5, sizeScale)}
           fill="none"
@@ -114,10 +119,12 @@ export default function TechPackCanvas({
       )}
 
       {/* Осьова лінія симетрії */}
-      <line x1={centerX} y1={pY} x2={centerX} y2={pY + pH} stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="6,6" />
+      {!exportMode && (
+        <line x1={centerX} y1={pY} x2={centerX} y2={pY + pH} stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="6,6" />
+      )}
 
       {/* Офіційні цільові контрольні точки */}
-      {controlPoints.map((cp) => {
+      {!exportMode && controlPoints.map((cp) => {
         const isOccupied = pieceLogos.some((l) => l.controlPointCode === cp.code);
         const cx = cp.centerHorizontally ? centerX : pX + cp.defaultX * sizeScale * pxPerCm;
         const cy = pY + cp.defaultY * sizeScale * pxPerCm;
@@ -169,12 +176,12 @@ export default function TechPackCanvas({
           w: scaledW * pxPerCm,
           h: scaledH * pxPerCm,
         };
-        const isSelected = selectedLogoId === logo.id;
+        const isSelected = !exportMode && selectedLogoId === logo.id;
 
         return (
-          <g key={logo.id} style={{ cursor: 'grab' }} onMouseDown={(e) => onLogoMouseDown(e, logo)}>
+          <g key={logo.id} style={{ cursor: 'grab' }} onMouseDown={exportMode ? undefined : (e) => onLogoMouseDown(e, logo)}>
             <LogoShape logo={logo} {...px} isSelected={isSelected} fallbackColor={jerseyColor} />
-            {showDimensions && isSelected && (
+            {dimensionsVisible && isSelected && (
               <DimensionArrows
                 logo={logo}
                 logoPx={px}

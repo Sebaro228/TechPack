@@ -1,116 +1,136 @@
-// Побудова валідного PDF 1.4 файлу
-export function buildPdfDocument(jpegDataUrl, imgPixelW, imgPixelH) {
-  const base64Data = jpegDataUrl.replace(/^data:image\/jpeg;base64,/, '');
-  const binaryImg = atob(base64Data);
-  const imgBytes = new Uint8Array(binaryImg.length);
-  for (let i = 0; i < binaryImg.length; i++) {
-    imgBytes[i] = binaryImg.charCodeAt(i);
-  }
+const A4_W = 595.28;
+const A4_H = 841.89;
+const PAGE_MARGIN = 20;
 
-  const a4W = 595.28;
-  const a4H = 841.89;
-  const margin = 20;
-  const maxDrawW = a4W - margin * 2;
-  const maxDrawH = a4H - margin * 2;
+const dataUrlToBytes = (dataUrl) => {
+  const binary = atob(dataUrl.replace(/^data:image\/jpeg;base64,/, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+};
 
-  const imgAspect = imgPixelW / imgPixelH;
-  let drawW = maxDrawW;
-  let drawH = drawW / imgAspect;
-
-  if (drawH > maxDrawH) {
-    drawH = maxDrawH;
-    drawW = drawH * imgAspect;
-  }
-
-  const drawX = (a4W - drawW) / 2;
-  const drawY = (a4H - drawH) / 2;
-
-  const streamContent = `q\n${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm\n/Im1 Do\nQ\n`;
-
+// Побудова валідного багатосторінкового PDF 1.4: одна JPEG-картинка на сторінку.
+// pages: [{ dataUrl, width, height }]  (width/height — у пікселях картинки)
+export function buildPdfDocument(pages) {
   const encoder = new TextEncoder();
   const parts = [];
-  parts.push(encoder.encode('%PDF-1.4\n%âãÏÓ\n'));
-
   const offsets = [];
-  let currentOffset = 15;
+  let offset = 0;
 
-  offsets.push(currentOffset);
-  const obj1 = '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n';
-  parts.push(encoder.encode(obj1));
-  currentOffset += encoder.encode(obj1).length;
+  const push = (data) => {
+    const bytes = typeof data === 'string' ? encoder.encode(data) : data;
+    parts.push(bytes);
+    offset += bytes.length;
+  };
+  const beginObject = (id) => {
+    offsets[id] = offset; // реальне зміщення в байтах
+  };
 
-  offsets.push(currentOffset);
-  const obj2 = '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n';
-  parts.push(encoder.encode(obj2));
-  currentOffset += encoder.encode(obj2).length;
+  push('%PDF-1.4\n%âãÏÓ\n');
 
-  offsets.push(currentOffset);
-  const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${a4W.toFixed(2)} ${a4H.toFixed(2)}] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`;
-  parts.push(encoder.encode(obj3));
-  currentOffset += encoder.encode(obj3).length;
+  // Нумерація: 1 — Catalog, 2 — Pages, далі для кожної сторінки: Page, Image, Content
+  beginObject(1);
+  push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
 
-  offsets.push(currentOffset);
-  const obj4Head = `4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${imgPixelW} /Height ${imgPixelH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgBytes.length} >>\nstream\n`;
-  parts.push(encoder.encode(obj4Head));
-  parts.push(imgBytes);
-  const obj4Tail = '\nendstream\nendobj\n';
-  parts.push(encoder.encode(obj4Tail));
-  currentOffset += encoder.encode(obj4Head).length + imgBytes.length + encoder.encode(obj4Tail).length;
+  const kids = pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
+  beginObject(2);
+  push(`2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>\nendobj\n`);
 
-  offsets.push(currentOffset);
-  const obj5 = `5 0 obj\n<< /Length ${streamContent.length} >>\nstream\n${streamContent}endstream\nendobj\n`;
-  parts.push(encoder.encode(obj5));
-  currentOffset += encoder.encode(obj5).length;
+  pages.forEach((page, i) => {
+    const pageId = 3 + i * 3;
+    const imgId = pageId + 1;
+    const contentId = pageId + 2;
+    const imgBytes = dataUrlToBytes(page.dataUrl);
 
-  const startXref = currentOffset;
-  let xref = `xref\n0 6\n0000000000 65535 f \n`;
-  offsets.forEach((off) => {
-    xref += off.toString().padStart(10, '0') + ' 00000 n \n';
+    const maxW = A4_W - PAGE_MARGIN * 2;
+    const maxH = A4_H - PAGE_MARGIN * 2;
+    const aspect = page.width / page.height;
+    let drawW = maxW;
+    let drawH = drawW / aspect;
+    if (drawH > maxH) {
+      drawH = maxH;
+      drawW = drawH * aspect;
+    }
+    const drawX = (A4_W - drawW) / 2;
+    // Картинку притискаємо до верху сторінки
+    const drawY = A4_H - PAGE_MARGIN - drawH;
+
+    const stream = `q\n${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm\n/Im1 Do\nQ\n`;
+
+    beginObject(pageId);
+    push(
+      `${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A4_W.toFixed(2)} ${A4_H.toFixed(2)}] ` +
+        `/Resources << /XObject << /Im1 ${imgId} 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`
+    );
+
+    beginObject(imgId);
+    push(
+      `${imgId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${page.width} /Height ${page.height} ` +
+        `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgBytes.length} >>\nstream\n`
+    );
+    push(imgBytes);
+    push('\nendstream\nendobj\n');
+
+    beginObject(contentId);
+    push(`${contentId} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}endstream\nendobj\n`);
   });
-  xref += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF\n`;
-  parts.push(encoder.encode(xref));
+
+  const objectCount = 3 + pages.length * 3; // разом з нульовим об'єктом
+  const startXref = offset;
+  let xref = `xref\n0 ${objectCount}\n0000000000 65535 f \n`;
+  for (let id = 1; id < objectCount; id++) {
+    xref += offsets[id].toString().padStart(10, '0') + ' 00000 n \n';
+  }
+  xref += `trailer\n<< /Size ${objectCount} /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF\n`;
+  push(xref);
 
   return new Blob(parts, { type: 'application/pdf' });
 }
 
-// Серіалізує SVG макет у JPEG і завантажує як PDF
-export function downloadSvgAsPdf(svgEl, { width, height, filename }) {
-  if (!svgEl) {
-    window.print();
-    return;
-  }
-
-  try {
-    const svgString = new XMLSerializer().serializeToString(svgEl);
-    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-    const URL = window.URL || window.webkitURL || window;
-    const blobURL = URL.createObjectURL(svgBlob);
-
+// SVG-рядок -> JPEG data URL (2x для чіткості)
+function rasterizeSvg(svgString, width, height) {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const scale = 2;
-      canvas.width = width * scale;
-      canvas.height = height * scale;
 
+    img.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(blobURL);
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdfBlob = buildPdfDocument(imgData, canvas.width, canvas.height);
-      const pdfUrl = URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = pdfUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(pdfUrl);
+      URL.revokeObjectURL(url);
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.95), width: canvas.width, height: canvas.height });
     };
-    img.src = blobURL;
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Не вдалося растеризувати SVG'));
+    };
+    img.src = url;
+  });
+}
+
+// Збирає усі види в один PDF (по сторінці на кожен) і завантажує файл.
+// pieces: [{ svgString, width, height }]
+export async function downloadPiecesAsPdf(pieces, filename) {
+  try {
+    const pages = [];
+    for (const piece of pieces) {
+      pages.push(await rasterizeSvg(piece.svgString, piece.width, piece.height));
+    }
+
+    const pdfUrl = URL.createObjectURL(buildPdfDocument(pages));
+    const a = document.createElement('a');
+    a.href = pdfUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(pdfUrl);
   } catch {
     window.print();
   }
